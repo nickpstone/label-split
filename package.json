@@ -1,0 +1,1 @@
+{"name":"pdf-transformer","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1 --port 4173","build":"vite build","preview":"vite preview --host 127.0.0.1 --port 4173","test":"node --test tests/*.test.mjs"},"dependencies":{"pdf-lib":"^1.17.1","pdfjs-dist":"^6.4.299"},"devDependencies":{"@playwright/test":"^1.56.1","vite":"^7.1.12"}}

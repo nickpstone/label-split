@@ -1,0 +1,31 @@
+import { chromium } from '@playwright/test';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { PDFDocument } from 'pdf-lib';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true,executablePath:'/home/nick/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome',args:['--no-sandbox']});
+const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
+const page=await context.newPage();const failures=[];const external=[];
+page.on('pageerror',e=>failures.push(e.message));page.on('request',r=>{if(!r.url().startsWith('http://127.0.0.1:4173')&&!r.url().startsWith('blob:')&&!r.url().startsWith('data:'))external.push(r.url());});
+await page.goto('http://127.0.0.1:4173');await page.screenshot({path:'tmp/desktop-empty.png',fullPage:true});
+await page.locator('#file').setInputFiles('/home/nick/Downloads/80e9a911-cc86-434a-8180-0be98c2d504c.pdf');
+try{await page.getByRole('heading',{name:'6 labels found'}).waitFor({timeout:30000});}catch(e){console.log('UI error:',await page.locator('#error').textContent(),'status:',await page.locator('#status').textContent(),'browser errors:',failures);throw e;}
+await page.locator('#download:not([disabled])').waitFor();assert.equal(await page.locator('.label-card').count(),6);
+await page.screenshot({path:'tmp/desktop-loaded.png',fullPage:true});
+const downloadEvent=page.waitForEvent('download');await page.locator('#download').click();const download=await downloadEvent;
+await mkdir('output/pdf',{recursive:true});await download.saveAs('output/pdf/shipping-labels.pdf');
+const bytes=await readFile('output/pdf/shipping-labels.pdf');const doc=await PDFDocument.load(bytes);assert.equal(doc.getPageCount(),6);
+for(const p of doc.getPages()){assert.ok(Math.abs(p.getWidth()-100*72/25.4)<.001);assert.ok(Math.abs(p.getHeight()-150*72/25.4)<.001);}
+await page.locator('.label-card input').first().uncheck();
+const selectedEvent=page.waitForEvent('download');await page.locator('#download').click();const selected=await selectedEvent;const selectedBytes=await readFile(await selected.path());assert.equal((await PDFDocument.load(selectedBytes)).getPageCount(),5);
+await page.locator('#select-all').click();await page.locator('#select-all').click();assert.equal(await page.locator('#download').isDisabled(),true);
+await page.locator('#select-all').click();
+await page.locator('#size').selectOption('102x152');await page.reload();assert.equal(await page.locator('#size').inputValue(),'102x152');
+await page.locator('#size').selectOption('100x150');
+await page.setViewportSize({width:390,height:844});await page.screenshot({path:'tmp/mobile-empty.png',fullPage:true});
+assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+await page.locator('#file').setInputFiles('/home/nick/Downloads/80e9a911-cc86-434a-8180-0be98c2d504c.pdf');await page.getByRole('heading',{name:'6 labels found'}).waitFor();await page.screenshot({path:'tmp/mobile-loaded.png',fullPage:true});
+assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+await page.locator('#file').setInputFiles({name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('bad file')});await page.locator('#error').filter({hasText:'Please choose a PDF'}).waitFor();
+assert.deepEqual(failures,[]);assert.deepEqual(external,[]);
+console.log('PASS: sample → 6 exact-size pages; selection → 5 pages; persisted settings; mobile; invalid file; no file uploads or external requests.');
+await browser.close();
